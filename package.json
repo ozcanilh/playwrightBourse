@@ -1,0 +1,35 @@
+{
+  "name": "playwrightbourse",
+  "version": "1.0.0",
+  "scripts": {
+    "pw:install": "playwright install --with-deps",
+    "pw:open": "playwright test --ui",
+    "pw:run": "playwright test",
+    "pw:run:chromium": "playwright test --project=chromium",
+    "pw:run:firefox": "playwright test --project=firefox",
+    "pw:run:webkit": "playwright test --project=webkit",
+    "pw:run:headed": "playwright test --headed",
+    "pw:run:spec": "playwright test",
+    "pw:report": "playwright show-report playwright-report",
+    "pw:trace": "playwright show-trace",
+    "allure:generate": "allure generate allure-results --clean -o allure-report",
+    "allure:open": "allure open allure-report",
+    "allure:serve": "allure serve allure-results",
+    "clean:reports": "rm -rf playwright-report test-results allure-results allure-report",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,json,md,yml,yaml}": "prettier --write"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.2",
+    "allure-commandline": "^2.38.1",
+    "allure-playwright": "^3.7.1",
+    "axios": "^1.7.7",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.3"
+  }
+}

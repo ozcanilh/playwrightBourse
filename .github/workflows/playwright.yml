@@ -1,0 +1,152 @@
+name: Playwright Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Daily run at 03:00 UTC (06:00 Istanbul)
+    - cron: '0 3 * * *'
+
+jobs:
+  # Job 1: Run tests across 3 parallel shards (Playwright-native sharding)
+  playwright-tests:
+    name: Run Playwright Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      - name: Run Playwright tests (shard ${{ matrix.shard }}/3)
+        run: npx playwright test --shard=${{ matrix.shard }}/3 --reporter=blob,allure-playwright
+
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: blob-report
+          retention-days: 2
+
+      - name: Upload allure-results (per shard)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.shard }}
+          path: allure-results
+          retention-days: 2
+          if-no-files-found: ignore
+
+      - name: Upload traces & screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # Job 2: Merge blob reports + build Allure report and publish
+  merge-reports:
+    name: Merge Reports & Publish
+    runs-on: ubuntu-latest
+    needs: playwright-tests
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ----- Playwright HTML report -----
+      - name: Download blob reports
+        uses: actions/download-artifact@v4
+        with:
+          path: all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge into single Playwright HTML report
+        run: npx playwright merge-reports --reporter html ./all-blob-reports
+
+      # ----- Allure report -----
+      - name: Download allure-results
+        uses: actions/download-artifact@v4
+        with:
+          path: allure-results
+          pattern: allure-results-*
+          merge-multiple: true
+
+      - name: Add allure environment + history
+        run: |
+          mkdir -p allure-results
+          # carry history forward so trends work
+          if [ -d "gh-pages-cache/allure-history/last-history" ]; then
+            cp -r gh-pages-cache/allure-history/last-history allure-results/history || true
+          fi
+
+      - name: Generate Allure HTML report
+        run: npx allure generate allure-results --clean -o allure-report
+
+      # ----- Stage everything under one publish dir -----
+      - name: Stage public dir
+        run: |
+          mkdir -p public
+          mv playwright-report public/playwright_${{ github.run_number }}
+          mv allure-report   public/allure_${{ github.run_number }}
+          # Latest aliases for easy linking
+          cp -r public/playwright_${{ github.run_number }} public/playwright-latest
+          cp -r public/allure_${{ github.run_number }}     public/allure-latest
+          # JSON summary for Slack
+          npx playwright merge-reports --reporter json ./all-blob-reports > public/results.json || true
+
+      - name: Upload merged HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-reports
+          path: public
+          retention-days: 7
+
+      - name: Deploy reports to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: public
+          keep_files: true
+
+      - name: Send to Slack
+        if: always()
+        run: node ./scripts/send_slack_message.js
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
