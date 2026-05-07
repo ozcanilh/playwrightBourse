@@ -120,7 +120,6 @@ Triggered on:
 - Push to `main`
 - Pull request to `main`
 - Manual `workflow_dispatch`
-- **Daily schedule:** every day at 03:00 UTC (06:00 Istanbul) via cron
 
 Two reports are published per run:
 

@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-  schedule:
-    # Daily run at 03:00 UTC (06:00 Istanbul)
-    - cron: '0 3 * * *'
 
 jobs:
   # Job 1: Run tests across 3 parallel shards (Playwright-native sharding)
